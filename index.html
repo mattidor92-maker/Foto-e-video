@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diagnostica finale Supabase</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f7f4ef; color: #2d2a26; }
+    .wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 16px; }
+    .card { background: white; border: 1px solid #ddd2c5; border-radius: 16px; padding: 18px; }
+    h1, h2 { margin: 0 0 10px; }
+    .row { display: grid; gap: 10px; }
+    button { border: 0; border-radius: 999px; padding: 12px 16px; background: #9b7b5a; color: white; font-weight: 700; cursor: pointer; }
+    .ok { color: #216c3b; }
+    .err { color: #a12f2f; }
+    .info { color: #6c5a4b; }
+    pre { white-space: pre-wrap; word-break: break-word; background: #faf8f5; border: 1px solid #eee2d6; border-radius: 12px; padding: 12px; min-height: 120px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Diagnostica finale</h1>
+      <div id="summary" class="row"></div>
+    </div>
+
+    <div class="card">
+      <h2>Stato librerie</h2>
+      <div id="libs" class="row"></div>
+    </div>
+
+    <div class="card">
+      <h2>Azioni</h2>
+      <div class="row">
+        <button id="jsBtn" type="button">Test JavaScript</button>
+        <button id="supabaseBtn" type="button">Test Supabase</button>
+      </div>
+      <div id="actionsOut" class="row"></div>
+    </div>
+
+    <div class="card">
+      <h2>Log tecnico</h2>
+      <pre id="logOut"></pre>
+    </div>
+  </div>
+
+  <script>
+    const summary = document.getElementById("summary");
+    const libs = document.getElementById("libs");
+    const actionsOut = document.getElementById("actionsOut");
+    const logOut = document.getElementById("logOut");
+    const jsBtn = document.getElementById("jsBtn");
+    const supabaseBtn = document.getElementById("supabaseBtn");
+
+    function log(line) {
+      logOut.textContent += line + "\n";
+      console.log(line);
+    }
+
+    function row(text, cls) {
+      const div = document.createElement("div");
+      div.className = cls || "info";
+      div.textContent = text;
+      return div;
+    }
+
+    summary.appendChild(row("JavaScript inline eseguito correttamente.", "ok"));
+    log("JS inline OK");
+
+    jsBtn.addEventListener("click", function () {
+      actionsOut.appendChild(row("Pulsante JavaScript funzionante.", "ok"));
+      alert("JavaScript OK");
+    });
+
+    if (window.supabase) {
+      libs.appendChild(row("window.supabase già presente.", "ok"));
+      log("window.supabase presente prima del caricamento dinamico");
+    } else {
+      libs.appendChild(row("window.supabase non presente all'avvio.", "info"));
+      log("window.supabase non presente all'avvio");
+    }
+
+    function loadSupabaseScript() {
+      return new Promise(function (resolve, reject) {
+        if (window.supabase && window.supabase.createClient) {
+          resolve("already-loaded");
+          return;
+        }
+
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+        script.onload = function () {
+          resolve("loaded");
+        };
+        script.onerror = function () {
+          reject(new Error("Impossibile caricare la libreria Supabase dal CDN"));
+        };
+        document.head.appendChild(script);
+      });
+    }
+
+    supabaseBtn.addEventListener("click", async function () {
+      actionsOut.innerHTML = "";
+      try {
+        const state = await loadSupabaseScript();
+        actionsOut.appendChild(row("Libreria Supabase caricata: " + state, "ok"));
+        log("Supabase script state: " + state);
+
+        if (!window.supabase || !window.supabase.createClient) {
+          throw new Error("Libreria caricata ma createClient non disponibile");
+        }
+
+        actionsOut.appendChild(row("window.supabase.createClient disponibile.", "ok"));
+        log("createClient disponibile");
+
+        const client = window.supabase.createClient(
+          "https://nfwkbcnmegmcbsaolani.supabase.co",
+          "sb_publishable_crCk7XsqLxoBF-F-oJZoSg_e5amHcIb"
+        );
+
+        const res = await client.storage.from("FOTOEVENTO").list("", {
+          limit: 5,
+          offset: 0,
+          sortBy: { column: "created_at", order: "desc" }
+        });
+
+        log("Risposta list(): " + JSON.stringify(res, null, 2));
+
+        if (res.error) {
+          actionsOut.appendChild(row("Errore bucket: " + res.error.message, "err"));
+          return;
+        }
+
+        actionsOut.appendChild(row("Connessione a Supabase riuscita.", "ok"));
+        actionsOut.appendChild(row("File trovati: " + ((res.data || []).length), "ok"));
+      } catch (e) {
+        actionsOut.appendChild(row("Errore Supabase: " + (e.message || String(e)), "err"));
+        log("Errore Supabase: " + (e.message || String(e)));
+      }
+    });
+  </script>
+</body>
+</html>
